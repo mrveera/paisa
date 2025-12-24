@@ -313,9 +313,3 @@ func BuildSubPath(baseDirectory string, path string) (string, error) {
 	return fullpath, nil
 }
 
-func ParseLoanTxnNote(note string) (decimal.Decimal, string) {
-	interestString := strings.Split(strings.Split(note, "Int:")[1], " ")[0]
-	interest, _ := decimal.NewFromString(interestString)
-	per := strings.Split(strings.Split(note, "Per:")[1], " ")[0]
-	return interest, per
-}

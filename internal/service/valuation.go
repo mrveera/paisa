@@ -10,7 +10,6 @@ import (
 
 	"github.com/ananthakumaran/paisa/internal/config"
 	"github.com/ananthakumaran/paisa/internal/model/posting"
-	"github.com/ananthakumaran/paisa/internal/utils"
 	"github.com/expr-lang/expr"
 	"github.com/shopspring/decimal"
 	log "github.com/sirupsen/logrus"
@@ -510,23 +509,4 @@ func GetCustomMarketPrice(p posting.Posting, evaluationDate time.Time) (decimal.
 		valuation.Name, p.Account, p.Amount.String(), price.String())
 
 	return price, true
-}
-
-// Legacy function for backwards compatibility with existing P2P logic
-// This can be removed once users migrate to custom_valuations config
-func GetLegacyP2PPrice(p posting.Posting) (decimal.Decimal, bool) {
-	if !utils.IsSameOrParent(p.Account, "Assets:p2p") || !strings.Contains(p.TransactionNote, "live") {
-		return decimal.Zero, false
-	}
-
-	interest, period := utils.ParseLoanTxnNote(p.TransactionNote)
-	if period == "M" {
-		daysHeld := decimal.NewFromInt(int64(time.Since(p.Date).Hours() / 24))
-		// Monthly interest: amount + (amount * interest/31/100 * days_held)
-		dailyRate := interest.Div(decimal.NewFromInt(31)).Div(decimal.NewFromInt(100))
-		accruedInterest := p.Amount.Mul(dailyRate).Mul(daysHeld)
-		return p.Amount.Add(accruedInterest), true
-	}
-
-	return p.Amount, true
 }

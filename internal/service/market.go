@@ -131,12 +131,6 @@ func GetMarketPrice(db *gorm.DB, p posting.Posting, date time.Time) decimal.Deci
 		return customPrice
 	}
 
-	// Auto-detect P2P-style accounts with "live" in note (backwards compatibility)
-	// This works even without explicit custom_valuations config
-	if legacyPrice, ok := GetLegacyP2PPrice(p); ok {
-		return legacyPrice
-	}
-
 	if utils.IsCurrency(p.Commodity) {
 		return p.Amount
 	}
