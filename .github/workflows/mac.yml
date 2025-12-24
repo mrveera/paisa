@@ -21,7 +21,10 @@ jobs:
         go-version: '1.24.2'
     - run: |
         brew install --force --overwrite sqlite3 create-dmg
-        brew install --build-from-source --verbose ./ledger.rb
+        # Create a temporary tap for the custom ledger formula
+        mkdir -p $(brew --repository)/Library/Taps/paisa/homebrew-ledger/Formula
+        cp ./ledger.rb $(brew --repository)/Library/Taps/paisa/homebrew-ledger/Formula/ledger.rb
+        brew install --build-from-source --verbose paisa/ledger/ledger
         cp "$(brew --prefix ledger)/bin/ledger" internal/binary/ledger
         npm install
         npm run build
