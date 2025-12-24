@@ -125,6 +125,13 @@ type CreditCard struct {
 	ExpirationDate  string `json:"expiration_date" yaml:"expiration_date"`
 }
 
+type CustomValuation struct {
+	Name         string `json:"name" yaml:"name"`
+	Account      string `json:"account" yaml:"account"`
+	NoteContains string `json:"note_contains" yaml:"note_contains"`
+	Formula      string `json:"formula" yaml:"formula"`
+}
+
 type Config struct {
 	JournalPath                string       `json:"journal_path" yaml:"journal_path"`
 	DBPath                     string       `json:"db_path" yaml:"db_path"`
@@ -157,6 +164,8 @@ type Config struct {
 	UserAccounts []UserAccount `json:"user_accounts" yaml:"user_accounts"`
 
 	CreditCards []CreditCard `json:"credit_cards" yaml:"credit_cards"`
+
+	CustomValuations []CustomValuation `json:"custom_valuations" yaml:"custom_valuations"`
 }
 
 var config Config
@@ -183,6 +192,7 @@ var defaultConfig = Config{
 	Goals:                      Goals{Retirement: []RetirementGoal{}, Savings: []SavingsGoal{}},
 	UserAccounts:               []UserAccount{},
 	CreditCards:                []CreditCard{},
+	CustomValuations:           []CustomValuation{},
 }
 
 var itemsUniquePropertiesMeta = jsonschema.MustCompileString("itemsUniqueProperties.json", `{
@@ -428,4 +438,8 @@ func TimeZone() *time.Location {
 	}
 
 	return time.Local
+}
+
+func GetCustomValuations() []CustomValuation {
+	return config.CustomValuations
 }

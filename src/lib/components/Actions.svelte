@@ -2,7 +2,7 @@
   import { sync } from "$lib/sync";
   import { isLoggedIn, isMobile, logout } from "$lib/utils";
   import { refresh } from "../../store";
-  import { obscure } from "../../persisted_store";
+  import { obscure, showZeroValueAccounts } from "../../persisted_store";
   import { goto } from "$app/navigation";
 
   async function syncWithLoader(request: Record<string, any>) {
@@ -14,10 +14,19 @@
   }
 
   const obscureId = "obscure";
-  let last = $obscure;
-  obscure.subscribe(() => {
-    if ($obscure === last) return;
+  const showZeroValueAccountsId = "showZeroValueAccounts";
 
+  let lastObscure = $obscure;
+  obscure.subscribe(() => {
+    if ($obscure === lastObscure) return;
+    lastObscure = $obscure;
+    refresh();
+  });
+
+  let lastShowZeroValueAccounts = $showZeroValueAccounts;
+  showZeroValueAccounts.subscribe(() => {
+    if ($showZeroValueAccounts === lastShowZeroValueAccounts) return;
+    lastShowZeroValueAccounts = $showZeroValueAccounts;
     refresh();
   });
 
@@ -65,6 +74,15 @@
             <i class="fas {$obscure ? 'fa-eye-slash' : 'fa-eye'}" />
           </span>
           <span>{$obscure ? "Show" : "Hide"} numbers</span>
+        </label>
+      </a>
+      <a class="dropdown-item icon-text">
+        <label for={showZeroValueAccountsId} class="cursor-pointer w-full inline-block">
+          <input bind:checked={$showZeroValueAccounts} id={showZeroValueAccountsId} type="checkbox" class="is-hidden" />
+          <span class="ml-0 icon is-small">
+            <i class="fas {$showZeroValueAccounts ? 'fa-eye' : 'fa-eye-slash'}" />
+          </span>
+          <span>{$showZeroValueAccounts ? "Show" : "Hide"} Zero Value Accounts</span>
         </label>
       </a>
       {#if showLogout}

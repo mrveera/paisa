@@ -17,6 +17,7 @@
   "dependencies": {
     "@cityssm/bulma-sticky-table": "^2.1.0",
     "@codemirror/autocomplete": "^6.4.2",
+    "@codemirror/lang-javascript": "^6.2.4",
     "@datasert/cronjs-matcher": "^1.2.0",
     "@datasert/cronjs-parser": "^1.2.0",
     "@egjs/svelte-grid": "^1.14.2",

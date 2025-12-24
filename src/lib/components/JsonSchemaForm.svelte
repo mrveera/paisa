@@ -4,6 +4,7 @@
   import Select from "svelte-select";
   import _ from "lodash";
   import PriceCodeSearchModal from "./PriceCodeSearchModal.svelte";
+  import FormulaEditor from "./FormulaEditor.svelte";
   import { iconGlyph, iconsList } from "$lib/icon";
   import AccountSelect from "./AccountsSelect.svelte";
 
@@ -174,6 +175,8 @@
               spellcheck="false"
               data-enable-grammarly="false"
             />
+          {:else if schema["ui:widget"] == "formula"}
+            <FormulaEditor bind:value {disabled} />
           {:else}
             <input
               {disabled}
