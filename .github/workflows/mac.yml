@@ -9,7 +9,7 @@ on:
 
 jobs:
   mac-binary:
-    runs-on: macos-13
+    runs-on: macos-latest
     steps:
     - uses: actions/checkout@v2.4.0
     - uses: actions/setup-node@v3
@@ -21,7 +21,10 @@ jobs:
         go-version: '1.24.2'
     - run: |
         brew install --force --overwrite sqlite3 create-dmg
-        brew install --build-from-source --verbose ./ledger.rb
+        # Create a temporary tap for the custom ledger formula
+        mkdir -p $(brew --repository)/Library/Taps/paisa/homebrew-ledger/Formula
+        cp ./ledger.rb $(brew --repository)/Library/Taps/paisa/homebrew-ledger/Formula/ledger.rb
+        brew install --build-from-source --verbose paisa/ledger/ledger
         cp "$(brew --prefix ledger)/bin/ledger" internal/binary/ledger
         npm install
         npm run build
@@ -30,6 +33,8 @@ jobs:
         cd desktop
         go install github.com/wailsapp/wails/v2/cmd/wails@latest
         wails build
+        # Ad-hoc code sign the app to prevent "damaged" error
+        codesign --force --deep --sign - build/bin/Paisa.app
         create-dmg --volname "Paisa" --window-pos 200 120 --window-size 800 400 --icon-size 100  --icon "Paisa.app" 200 190 --app-drop-link 600 185 --hide-extension "Paisa.app" --volicon build/bin/Paisa.app/Contents/Resources/iconfile.icns  "Paisa.dmg" build/bin/Paisa.app
         cd ..
         cp desktop/Paisa.dmg paisa-app-macos-amd64.dmg
