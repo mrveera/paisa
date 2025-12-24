@@ -1125,6 +1125,46 @@
         ],
         "additionalProperties": false
       }
+    },
+    "custom_valuations": {
+      "type": "array",
+      "description": "Custom valuation formulas for calculating asset market prices dynamically",
+      "default": [
+        {
+          "name": "P2P Interest",
+          "account": "Assets:p2p:*",
+          "note_contains": "live",
+          "formula": "amount + simple_interest(amount, parse_note_float(note, \"Int:\"), days_held)"
+        }
+      ],
+      "itemsUniqueProperties": ["name"],
+      "items": {
+        "type": "object",
+        "ui:header": "name",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Name of the custom valuation rule",
+            "minLength": 1
+          },
+          "account": {
+            "type": "string",
+            "description": "Account pattern to match (supports wildcards like Assets:p2p:*)",
+            "ui:widget": "accounts"
+          },
+          "note_contains": {
+            "type": "string",
+            "description": "Optional: Only apply if transaction note contains this text"
+          },
+          "formula": {
+            "type": "string",
+            "description": "Expression formula. Available variables: amount, quantity, date, days_held, note. Functions: parse_note_float(note, prefix), parse_note_string(note, prefix)",
+            "ui:widget": "formula"
+          }
+        },
+        "required": ["name", "account", "formula"],
+        "additionalProperties": false
+      }
     }
   },
   "required": ["journal_path", "db_path"],

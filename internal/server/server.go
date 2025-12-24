@@ -375,6 +375,20 @@ func Build(db *gorm.DB, enableCompression bool) *gin.Engine {
 		c.JSON(200, GetCreditCard(db, c.Param("account")))
 	})
 
+	// Custom Valuations API
+	router.GET("/api/valuations/validate", func(c *gin.Context) {
+		c.JSON(200, ValidateValuations())
+	})
+
+	router.POST("/api/valuations/preview", func(c *gin.Context) {
+		var request ValuationPreviewRequest
+		if err := c.ShouldBindJSON(&request); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(200, PreviewValuation(request))
+	})
+
 	router.NoRoute(func(c *gin.Context) {
 		c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(web.Index))
 	})

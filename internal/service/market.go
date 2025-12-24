@@ -2,7 +2,6 @@ package service
 
 import (
 	"sort"
-	"strings"
 	"sync"
 	"time"
 
@@ -127,12 +126,15 @@ func GetAllPrices(db *gorm.DB, commodity string) []price.Price {
 }
 
 func GetMarketPrice(db *gorm.DB, p posting.Posting, date time.Time) decimal.Decimal {
-	if utils.IsSameOrParent(p.Account, "Assets:p2p") && strings.Contains(p.TransactionNote, "live") {
-		interest, period := utils.ParseLoanTxnNote(p.TransactionNote)
-		if period == "M" {
-			return p.Amount.Add(p.Amount.Mul(interest.Div(decimal.NewFromInt(31)).Div(decimal.NewFromInt(100))).Mul(decimal.NewFromInt(int64(time.Since(p.Date).Hours() / 24))))
-		}
-		return p.Amount
+	// Try custom valuations first (from config)
+	if customPrice, ok := GetCustomMarketPrice(p, date); ok {
+		return customPrice
+	}
+
+	// Auto-detect P2P-style accounts with "live" in note (backwards compatibility)
+	// This works even without explicit custom_valuations config
+	if legacyPrice, ok := GetLegacyP2PPrice(p); ok {
+		return legacyPrice
 	}
 
 	if utils.IsCurrency(p.Commodity) {
