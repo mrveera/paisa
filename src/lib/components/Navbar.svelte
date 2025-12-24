@@ -103,6 +103,7 @@
       ]
     },
     { label: "Income", href: "/income" },
+    { label: "Loans", href: "/loans" },
     {
       label: "Ledger",
       href: "/ledger",

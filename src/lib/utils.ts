@@ -157,6 +157,50 @@ export interface Interest {
   apr: number;
 }
 
+// Loan tracking types
+export type LoanStatus = "active" | "maturing" | "overdue" | "closed";
+
+export interface Loan {
+  account: string;
+  principal: number;
+  current_value: number;
+  gain_amount: number;
+  interest_rate: number;
+  period: string;
+  start_date: dayjs.Dayjs;
+  maturity_date: dayjs.Dayjs | null;
+  days_to_maturity: number;
+  days_held: number;
+  status: LoanStatus;
+  risk_level: string;
+  percent_complete: number;
+  postings: Posting[];
+}
+
+export interface LoanStatusSummary {
+  count: number;
+  amount: number;
+}
+
+export interface LoanSummary {
+  total_lent: number;
+  total_value: number;
+  total_gain: number;
+  total_accounts: number;
+  by_status: Record<LoanStatus, LoanStatusSummary>;
+  by_risk: Record<string, LoanStatusSummary>;
+}
+
+export interface LoanAlert {
+  type: string;
+  severity: string;
+  account: string;
+  message: string;
+  amount: number;
+  days_overdue?: number;
+  days_to_maturity?: number;
+}
+
 export interface AccountTfIdf {
   tf_idf: Record<string, Record<string, number>>;
   index: {
@@ -790,6 +834,16 @@ export function ajax(
     result: number;
     error?: string;
   };
+}>;
+
+// Loans API
+export function ajax(route: "/api/loans"): Promise<{ loans: Loan[] }>;
+export function ajax(route: "/api/loans/summary"): Promise<{ summary: LoanSummary }>;
+export function ajax(route: "/api/loans/alerts"): Promise<{ alerts: LoanAlert[] }>;
+export function ajax(route: "/api/loans/dashboard"): Promise<{
+  loans: Loan[];
+  summary: LoanSummary;
+  alerts: LoanAlert[];
 }>;
 
 export async function ajax(
