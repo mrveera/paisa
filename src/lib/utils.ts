@@ -769,6 +769,29 @@ export function ajax(
 
 export function ajax(route: "/api/ping"): Promise<{ success: boolean; error?: string }>;
 
+export function ajax(route: "/api/valuations/validate"): Promise<{
+  valid: boolean;
+  results: Array<{
+    name: string;
+    account: string;
+    formula: string;
+    valid: boolean;
+    error?: string;
+  }>;
+}>;
+
+export function ajax(
+  route: "/api/valuations/preview",
+  options?: RequestOptions
+): Promise<{
+  preview: {
+    formula: string;
+    sample_data: Record<string, any>;
+    result: number;
+    error?: string;
+  };
+}>;
+
 export async function ajax(
   route: string,
   options?: RequestOptions,

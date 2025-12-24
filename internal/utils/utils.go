@@ -312,3 +312,4 @@ func BuildSubPath(baseDirectory string, path string) (string, error) {
 
 	return fullpath, nil
 }
+

@@ -102,6 +102,7 @@ func computeNetworthTimeline(db *gorm.DB, postings []posting.Posting, computeBal
 		withdrawal   decimal.Decimal
 		balance      decimal.Decimal
 		balanceUnits decimal.Decimal
+		postings     []posting.Posting // Track postings for daily recalculation
 	}
 
 	accumulator := make(map[string]RunningSum)
@@ -126,6 +127,7 @@ func computeNetworthTimeline(db *gorm.DB, postings []posting.Posting, computeBal
 			if !isCapitalGains {
 				rs.balance = rs.balance.Add(service.GetMarketPrice(db, p, start))
 				rs.balanceUnits = rs.balanceUnits.Add(p.Quantity)
+				rs.postings = append(rs.postings, p) // Track posting for recalculation
 			}
 
 			accumulator[p.Commodity] = rs
@@ -142,7 +144,13 @@ func computeNetworthTimeline(db *gorm.DB, postings []posting.Posting, computeBal
 			withdrawal = withdrawal.Add(rs.withdrawal)
 
 			if utils.IsCurrency(commodity) {
-				balance = balance.Add(rs.balance)
+				// Recalculate market price for each day to support custom valuations
+				// (e.g., P2P loans with accruing interest)
+				currencyBalance := decimal.Zero
+				for _, posting := range rs.postings {
+					currencyBalance = currencyBalance.Add(service.GetMarketPrice(db, posting, start))
+				}
+				balance = balance.Add(currencyBalance)
 			} else {
 				if computeBalanceUnits {
 					balanceUnits = balanceUnits.Add(rs.balanceUnits)

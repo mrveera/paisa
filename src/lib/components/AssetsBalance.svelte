@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { type AssetBreakdown, buildTree } from "$lib/utils";
+  import { type AssetBreakdown, buildTree, isZero } from "$lib/utils";
   import _ from "lodash";
   import Table from "./Table.svelte";
   import type { ColumnDefinition } from "tabulator-tables";
@@ -11,6 +11,8 @@
     nonZeroFloatChange,
     nonZeroPercentageChange
   } from "$lib/table_formatters";
+  import { showZeroValueAccounts } from "../../persisted_store";
+  import { refresh } from "../../store";
 
   export let breakdowns: Record<string, AssetBreakdown>;
   export let indent = true;
@@ -53,13 +55,38 @@
   ];
 
   let tree: AssetBreakdown[] = [];
-  $: if (breakdowns) {
-    tree = buildTree(Object.values(breakdowns), (i) => i.group);
+  let filteredBreakdowns: Record<string, AssetBreakdown> = {};
+
+  $: {
+    if (breakdowns) {
+      // Filter out zero value accounts if the toggle is off
+      filteredBreakdowns = $showZeroValueAccounts
+        ? breakdowns
+        : _.pickBy(breakdowns, (breakdown) => {
+            return !isZero(breakdown.marketAmount) || !isZero(breakdown.balanceUnits);
+          });
+
+      tree = buildTree(Object.values(filteredBreakdowns), (i) => i.group);
+    }
+  }
+
+  function toggleZeroValueAccounts() {
+    showZeroValueAccounts.update(value => !value);
+    refresh();
   }
 </script>
+
+<div class="mb-3 is-flex is-justify-content-flex-end">
+  <button class="button is-small" on:click={toggleZeroValueAccounts}>
+    <span class="icon is-small">
+      <i class="fas {$showZeroValueAccounts ? 'fa-eye-slash' : 'fa-eye'}"></i>
+    </span>
+    <span>{$showZeroValueAccounts ? 'Hide' : 'Show'} Zero Value Accounts</span>
+  </button>
+</div>
 
 {#if indent}
   <Table data={tree} tree {columns} />
 {:else}
-  <Table data={Object.values(breakdowns)} {columns} />
+  <Table data={Object.values(filteredBreakdowns)} {columns} />
 {/if}
