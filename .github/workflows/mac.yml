@@ -9,30 +9,71 @@ on:
 
 jobs:
   mac-binary:
-    runs-on: macos-13
+    runs-on: macos-latest
     steps:
-    - uses: actions/checkout@v2.4.0
-    - uses: actions/setup-node@v3
+    - uses: actions/checkout@v4
+    
+    - uses: actions/setup-node@v4
       with:
         node-version: 22
         cache: npm
-    - uses: actions/setup-go@v4
+    
+    - uses: actions/setup-go@v5
       with:
         go-version: '1.24.2'
-    - run: |
+    
+    # Cache Homebrew packages
+    - name: Cache Homebrew packages
+      uses: actions/cache@v4
+      id: homebrew-cache
+      with:
+        path: |
+          ~/Library/Caches/Homebrew
+          /usr/local/Cellar/sqlite
+          /usr/local/Cellar/create-dmg
+          /opt/homebrew/Cellar/sqlite
+          /opt/homebrew/Cellar/create-dmg
+        key: homebrew-${{ runner.os }}-${{ runner.arch }}-sqlite-create-dmg-v1
+    
+    # Cache the built ledger binary
+    - name: Cache Ledger binary
+      uses: actions/cache@v4
+      id: ledger-cache
+      with:
+        path: internal/binary/ledger
+        key: ledger-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('ledger.rb') }}
+    
+    - name: Install Homebrew packages
+      run: |
         brew install --force --overwrite sqlite3 create-dmg
-        brew install --build-from-source --verbose ./ledger.rb
+    
+    - name: Build Ledger from source
+      if: steps.ledger-cache.outputs.cache-hit != 'true'
+      run: |
+        # Create a temporary tap for the custom ledger formula
+        mkdir -p $(brew --repository)/Library/Taps/paisa/homebrew-ledger/Formula
+        cp ./ledger.rb $(brew --repository)/Library/Taps/paisa/homebrew-ledger/Formula/ledger.rb
+        brew install --build-from-source --verbose paisa/ledger/ledger
         cp "$(brew --prefix ledger)/bin/ledger" internal/binary/ledger
+    
+    - name: Build application
+      run: |
         npm install
         npm run build
         go build
         cp paisa paisa-cli-macos-amd64
+    
+    - name: Build desktop app
+      run: |
         cd desktop
         go install github.com/wailsapp/wails/v2/cmd/wails@latest
         wails build
-        create-dmg --volname "Paisa" --window-pos 200 120 --window-size 800 400 --icon-size 100  --icon "Paisa.app" 200 190 --app-drop-link 600 185 --hide-extension "Paisa.app" --volicon build/bin/Paisa.app/Contents/Resources/iconfile.icns  "Paisa.dmg" build/bin/Paisa.app
+        # Ad-hoc code sign the app to prevent "damaged" error
+        codesign --force --deep --sign - build/bin/Paisa.app
+        create-dmg --volname "Paisa" --window-pos 200 120 --window-size 800 400 --icon-size 100 --icon "Paisa.app" 200 190 --app-drop-link 600 185 --hide-extension "Paisa.app" --volicon build/bin/Paisa.app/Contents/Resources/iconfile.icns "Paisa.dmg" build/bin/Paisa.app
         cd ..
         cp desktop/Paisa.dmg paisa-app-macos-amd64.dmg
+    
     - name: Release
       uses: softprops/action-gh-release@v1
       with:
