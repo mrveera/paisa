@@ -35,6 +35,18 @@ type ValuationContext struct {
 	Account string `expr:"account"`
 	// Commodity is the commodity name
 	Commodity string `expr:"commodity"`
+
+	// Maturity tracking fields
+	// TargetDays is the target duration in days (parsed from note)
+	TargetDays float64 `expr:"target_days"`
+	// DaysToMaturity is days until maturity (negative if overdue)
+	DaysToMaturity float64 `expr:"days_to_maturity"`
+	// IsOverdue is true if past maturity date
+	IsOverdue bool `expr:"is_overdue"`
+	// IsMaturing is true if maturing within 30 days
+	IsMaturing bool `expr:"is_maturing"`
+	// RiskLevel is the risk level parsed from note (default "medium")
+	RiskLevel string `expr:"risk_level"`
 }
 
 // Custom functions available in expressions
@@ -244,6 +256,34 @@ var exprFunctions = []expr.Option{
 		},
 		new(func(float64, float64, float64) float64),
 	),
+
+	// ============ Duration/Maturity Functions ============
+
+	// parse_duration parses a duration string like "3yr", "6mo", "90d" to days
+	expr.Function(
+		"parse_duration",
+		func(params ...any) (any, error) {
+			note := params[0].(string)
+			prefix := params[1].(string)
+			return ParseDuration(parseNoteString(note, prefix)), nil
+		},
+		new(func(string, string) float64),
+	),
+
+	// maturity_status returns "active", "maturing", or "overdue"
+	expr.Function(
+		"maturity_status",
+		func(params ...any) (any, error) {
+			daysToMaturity := toFloat64(params[0])
+			if daysToMaturity < 0 {
+				return "overdue", nil
+			} else if daysToMaturity <= 30 {
+				return "maturing", nil
+			}
+			return "active", nil
+		},
+		new(func(float64) string),
+	),
 }
 
 // toFloat64 converts various numeric types to float64
@@ -291,6 +331,54 @@ func parseNoteString(note, prefix string) string {
 		return ""
 	}
 	return strings.Split(parts[1], " ")[0]
+}
+
+// ParseDuration parses a duration string like "3yr", "6mo", "90d" to days
+// Supports formats: "3yr", "3y", "6mo", "6m", "90d", "90"
+func ParseDuration(duration string) float64 {
+	if duration == "" {
+		return 0
+	}
+
+	duration = strings.ToLower(strings.TrimSpace(duration))
+
+	// Try to extract number and unit
+	re := regexp.MustCompile(`^(\d+(?:\.\d+)?)\s*(yr|y|year|years|mo|m|month|months|d|day|days)?$`)
+	matches := re.FindStringSubmatch(duration)
+
+	if len(matches) < 2 {
+		return 0
+	}
+
+	value, err := strconv.ParseFloat(matches[1], 64)
+	if err != nil {
+		return 0
+	}
+
+	unit := ""
+	if len(matches) >= 3 {
+		unit = matches[2]
+	}
+
+	switch unit {
+	case "yr", "y", "year", "years":
+		return value * 365
+	case "mo", "m", "month", "months":
+		return value * 30
+	case "d", "day", "days", "":
+		return value
+	default:
+		return value // assume days if unknown unit
+	}
+}
+
+// ParseRiskLevel extracts risk level from note, returns "medium" as default
+func ParseRiskLevel(note string) string {
+	risk := parseNoteString(note, "Risk:")
+	if risk == "" {
+		return "medium"
+	}
+	return strings.ToLower(risk)
 }
 
 // matchAccountPattern checks if an account matches a pattern (supports * wildcard)
@@ -367,16 +455,28 @@ func buildValuationContext(p posting.Posting, evaluationDate time.Time) Valuatio
 	monthsHeld := daysHeld / 30.44 // average days per month
 	yearsHeld := daysHeld / 365.25 // account for leap years
 
+	// Parse maturity info from note
+	targetDays := ParseDuration(parseNoteString(p.TransactionNote, "Target:"))
+	daysToMaturity := targetDays - daysHeld
+	isOverdue := targetDays > 0 && daysToMaturity < 0
+	isMaturing := targetDays > 0 && daysToMaturity >= 0 && daysToMaturity <= 30
+	riskLevel := ParseRiskLevel(p.TransactionNote)
+
 	return ValuationContext{
-		Amount:     p.Amount.InexactFloat64(),
-		Quantity:   p.Quantity.InexactFloat64(),
-		Date:       p.Date,
-		DaysHeld:   daysHeld,
-		MonthsHeld: monthsHeld,
-		YearsHeld:  yearsHeld,
-		Note:       p.TransactionNote,
-		Account:    p.Account,
-		Commodity:  p.Commodity,
+		Amount:         p.Amount.InexactFloat64(),
+		Quantity:       p.Quantity.InexactFloat64(),
+		Date:           p.Date,
+		DaysHeld:       daysHeld,
+		MonthsHeld:     monthsHeld,
+		YearsHeld:      yearsHeld,
+		Note:           p.TransactionNote,
+		Account:        p.Account,
+		Commodity:      p.Commodity,
+		TargetDays:     targetDays,
+		DaysToMaturity: daysToMaturity,
+		IsOverdue:      isOverdue,
+		IsMaturing:     isMaturing,
+		RiskLevel:      riskLevel,
 	}
 }
 

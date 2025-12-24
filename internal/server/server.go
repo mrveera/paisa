@@ -389,6 +389,20 @@ func Build(db *gorm.DB, enableCompression bool) *gin.Engine {
 		c.JSON(200, PreviewValuation(request))
 	})
 
+	// Loans API
+	router.GET("/api/loans", func(c *gin.Context) {
+		c.JSON(200, GetLoans(db))
+	})
+	router.GET("/api/loans/summary", func(c *gin.Context) {
+		c.JSON(200, GetLoanSummary(db))
+	})
+	router.GET("/api/loans/alerts", func(c *gin.Context) {
+		c.JSON(200, GetLoanAlerts(db))
+	})
+	router.GET("/api/loans/dashboard", func(c *gin.Context) {
+		c.JSON(200, GetLoansDashboard(db))
+	})
+
 	router.NoRoute(func(c *gin.Context) {
 		c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(web.Index))
 	})

@@ -371,3 +371,116 @@ func TestNoteContainsFunction(t *testing.T) {
 		assert.InDelta(t, tt.expected, result.InexactFloat64(), 0.001, "Formula: %s", tt.formula)
 	}
 }
+
+func TestParseDuration(t *testing.T) {
+	tests := []struct {
+		duration string
+		expected float64
+	}{
+		// Years
+		{"3yr", 3 * 365},
+		{"3y", 3 * 365},
+		{"1year", 1 * 365},
+		{"2years", 2 * 365},
+		// Months
+		{"6mo", 6 * 30},
+		{"6m", 6 * 30},
+		{"12month", 12 * 30},
+		{"3months", 3 * 30},
+		// Days
+		{"90d", 90},
+		{"30day", 30},
+		{"45days", 45},
+		{"90", 90}, // bare number = days
+		// Edge cases
+		{"", 0},
+		{"invalid", 0},
+		{"1.5yr", 1.5 * 365},
+	}
+
+	for _, tt := range tests {
+		result := ParseDuration(tt.duration)
+		assert.Equal(t, tt.expected, result, "ParseDuration(%q)", tt.duration)
+	}
+}
+
+func TestParseRiskLevel(t *testing.T) {
+	tests := []struct {
+		note     string
+		expected string
+	}{
+		{"live Int:2 Per:M Risk:high", "high"},
+		{"live Int:2 Per:M Risk:low", "low"},
+		{"live Int:2 Per:M Risk:medium", "medium"},
+		{"live Int:2 Per:M Risk:HIGH", "high"}, // case insensitive
+		{"live Int:2 Per:M", "medium"},         // default
+		{"", "medium"},                          // default
+	}
+
+	for _, tt := range tests {
+		result := ParseRiskLevel(tt.note)
+		assert.Equal(t, tt.expected, result, "ParseRiskLevel(%q)", tt.note)
+	}
+}
+
+func TestMaturityContextVariables(t *testing.T) {
+	// Loan started 100 days ago with 1 year target
+	postingDate := time.Now().AddDate(0, 0, -100)
+	now := time.Now()
+
+	p := posting.Posting{
+		Account:         "Assets:p2p:Friend",
+		Amount:          decimal.NewFromInt(100000),
+		Quantity:        decimal.NewFromInt(1),
+		Date:            postingDate,
+		TransactionNote: "live Int:12 Per:Y Target:1yr Risk:low",
+	}
+
+	ctx := buildValuationContext(p, now)
+
+	// Check maturity fields
+	assert.InDelta(t, 365.0, ctx.TargetDays, 0.1, "TargetDays")
+	assert.InDelta(t, 265.0, ctx.DaysToMaturity, 1.0, "DaysToMaturity (365-100)")
+	assert.False(t, ctx.IsOverdue, "Should not be overdue")
+	assert.False(t, ctx.IsMaturing, "Should not be maturing (>30 days)")
+	assert.Equal(t, "low", ctx.RiskLevel, "RiskLevel")
+}
+
+func TestMaturityContextOverdue(t *testing.T) {
+	// Loan started 400 days ago with 1 year target (overdue by ~35 days)
+	postingDate := time.Now().AddDate(0, 0, -400)
+	now := time.Now()
+
+	p := posting.Posting{
+		Account:         "Assets:p2p:Friend",
+		Amount:          decimal.NewFromInt(100000),
+		Quantity:        decimal.NewFromInt(1),
+		Date:            postingDate,
+		TransactionNote: "live Int:12 Per:Y Target:1yr",
+	}
+
+	ctx := buildValuationContext(p, now)
+
+	assert.True(t, ctx.IsOverdue, "Should be overdue")
+	assert.True(t, ctx.DaysToMaturity < 0, "DaysToMaturity should be negative")
+}
+
+func TestMaturityContextMaturing(t *testing.T) {
+	// Loan started 350 days ago with 1 year target (matures in ~15 days)
+	postingDate := time.Now().AddDate(0, 0, -350)
+	now := time.Now()
+
+	p := posting.Posting{
+		Account:         "Assets:p2p:Friend",
+		Amount:          decimal.NewFromInt(100000),
+		Quantity:        decimal.NewFromInt(1),
+		Date:            postingDate,
+		TransactionNote: "live Int:12 Per:Y Target:1yr",
+	}
+
+	ctx := buildValuationContext(p, now)
+
+	assert.False(t, ctx.IsOverdue, "Should not be overdue")
+	assert.True(t, ctx.IsMaturing, "Should be maturing (within 30 days)")
+	assert.True(t, ctx.DaysToMaturity > 0 && ctx.DaysToMaturity <= 30, "DaysToMaturity should be 0-30")
+}
