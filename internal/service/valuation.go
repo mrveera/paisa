@@ -13,6 +13,7 @@ import (
 	"github.com/expr-lang/expr"
 	"github.com/shopspring/decimal"
 	log "github.com/sirupsen/logrus"
+	"gorm.io/gorm"
 )
 
 // ValuationContext provides the variables available in valuation expressions
@@ -583,10 +584,27 @@ func PreviewFormula(formula string, amount float64, daysHeld float64, note strin
 	return preview
 }
 
+// isAccountClosed checks if any posting in the account has "closed" or "settled" in the note
+func isAccountClosed(db *gorm.DB, account string) bool {
+	if db == nil {
+		return false
+	}
+
+	var count int64
+	db.Model(&posting.Posting{}).
+		Where("account = ?", account).
+		Where("(transaction_note LIKE ? OR transaction_note LIKE ? OR note LIKE ? OR note LIKE ?)",
+			"%closed%", "%settled%", "%closed%", "%settled%").
+		Count(&count)
+
+	return count > 0
+}
+
 // GetCustomMarketPrice attempts to calculate a custom market price for a posting.
 // Returns the calculated price and true if a custom valuation was applied,
 // or zero and false if no custom valuation matches.
-func GetCustomMarketPrice(p posting.Posting, evaluationDate time.Time) (decimal.Decimal, bool) {
+// If the account has any posting with "closed" or "settled", returns the original amount.
+func GetCustomMarketPrice(db *gorm.DB, p posting.Posting, evaluationDate time.Time) (decimal.Decimal, bool) {
 	valuations := config.GetCustomValuations()
 	log.Debugf("GetCustomMarketPrice: checking %d custom valuations for account %s", len(valuations), p.Account)
 
@@ -594,6 +612,12 @@ func GetCustomMarketPrice(p posting.Posting, evaluationDate time.Time) (decimal.
 	if valuation == nil {
 		log.Debugf("GetCustomMarketPrice: no matching valuation found for account %s", p.Account)
 		return decimal.Zero, false
+	}
+
+	// If account is closed, return original amount (no interest calculation)
+	if isAccountClosed(db, p.Account) {
+		log.Debugf("GetCustomMarketPrice: account %s is closed, returning original amount", p.Account)
+		return p.Amount, true
 	}
 
 	log.Debugf("GetCustomMarketPrice: found valuation '%s' for account %s", valuation.Name, p.Account)

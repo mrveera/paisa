@@ -3,6 +3,7 @@ package service
 import (
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/ananthakumaran/paisa/internal/config"
@@ -99,24 +100,13 @@ func GetLoans(db *gorm.DB) []Loan {
 			pattern = pattern[:len(pattern)-1] + "%"
 		}
 
+		// Get ALL postings for the account pattern (don't filter by NoteContains)
+		// We need all postings to properly detect closed status
 		var postings []posting.Posting
-		if v.NoteContains != "" {
-			postings = query.Init(db).Like(pattern).All()
-			postings = lo.Filter(postings, func(p posting.Posting, _ int) bool {
-				return matchAccountPattern(p.Account, accountPattern) &&
-					(v.NoteContains == "" || lo.Contains([]string{p.TransactionNote, p.Note}, v.NoteContains) ||
-						lo.SomeBy([]string{p.TransactionNote, p.Note}, func(n string) bool {
-							return len(n) > 0 && len(v.NoteContains) > 0 && 
-								(n == v.NoteContains || len(n) >= len(v.NoteContains) && n[:len(v.NoteContains)] == v.NoteContains ||
-								 containsSubstring(n, v.NoteContains))
-						}))
-			})
-		} else {
-			postings = query.Init(db).Like(pattern).All()
-			postings = lo.Filter(postings, func(p posting.Posting, _ int) bool {
-				return matchAccountPattern(p.Account, accountPattern)
-			})
-		}
+		postings = query.Init(db).Like(pattern).All()
+		postings = lo.Filter(postings, func(p posting.Posting, _ int) bool {
+			return matchAccountPattern(p.Account, accountPattern)
+		})
 
 		// Group by account
 		byAccount := lo.GroupBy(postings, func(p posting.Posting) string { return p.Account })
@@ -146,9 +136,12 @@ func GetLoans(db *gorm.DB) []Loan {
 	return loans
 }
 
-func containsSubstring(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
+// isLoanClosed checks if any posting has "closed" or "settled" in the note
+func isLoanClosed(postings []posting.Posting) bool {
+	for _, p := range postings {
+		note := p.TransactionNote + " " + p.Note
+		if strings.Contains(strings.ToLower(note), "closed") ||
+			strings.Contains(strings.ToLower(note), "settled") {
 			return true
 		}
 	}
@@ -166,6 +159,9 @@ func buildLoan(db *gorm.DB, account string, postings []posting.Posting, now time
 		return postings[i].Date.Before(postings[j].Date)
 	})
 
+	// Check if loan is explicitly closed
+	isClosed := isLoanClosed(postings)
+
 	// Calculate totals
 	var principal decimal.Decimal
 	var currentValue decimal.Decimal
@@ -178,13 +174,18 @@ func buildLoan(db *gorm.DB, account string, postings []posting.Posting, now time
 		if p.Amount.GreaterThan(decimal.Zero) {
 			principal = principal.Add(p.Amount)
 		}
-		currentValue = currentValue.Add(GetMarketPrice(db, p, now))
+		
+		// For closed loans, use actual amount (no interest calculation)
+		// For active loans, use market price (with interest)
+		if isClosed {
+			currentValue = currentValue.Add(p.Amount)
+		} else {
+			currentValue = currentValue.Add(GetMarketPrice(db, p, now))
+		}
 	}
 
-	// If balance is zero or negative, loan is closed
-	if currentValue.LessThanOrEqual(decimal.Zero) {
-		return nil
-	}
+	// Determine if loan is closed by balance or explicit status
+	balanceIsZero := currentValue.LessThanOrEqual(decimal.Zero)
 
 	// Parse loan info from first posting's note
 	firstPosting := postings[0]
@@ -201,7 +202,11 @@ func buildLoan(db *gorm.DB, account string, postings []posting.Posting, now time
 	var percentComplete float64
 	var status LoanStatus
 
-	if targetDays > 0 {
+	// Determine status
+	if isClosed || balanceIsZero {
+		status = LoanStatusClosed
+		percentComplete = 100
+	} else if targetDays > 0 {
 		md := startDate.Add(time.Duration(targetDays*24) * time.Hour)
 		maturityDate = &md
 		daysToMaturity = int(md.Sub(now).Hours() / 24)
@@ -223,6 +228,11 @@ func buildLoan(db *gorm.DB, account string, postings []posting.Posting, now time
 	}
 
 	gainAmount := currentValue.Sub(principal)
+	
+	// For closed loans, gain is actual balance (could be 0 or final settlement)
+	if status == LoanStatusClosed && balanceIsZero {
+		gainAmount = decimal.Zero
+	}
 
 	return &Loan{
 		Account:         account,

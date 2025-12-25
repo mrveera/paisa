@@ -127,7 +127,7 @@ func GetAllPrices(db *gorm.DB, commodity string) []price.Price {
 
 func GetMarketPrice(db *gorm.DB, p posting.Posting, date time.Time) decimal.Decimal {
 	// Try custom valuations first (from config)
-	if customPrice, ok := GetCustomMarketPrice(p, date); ok {
+	if customPrice, ok := GetCustomMarketPrice(db, p, date); ok {
 		return customPrice
 	}
 
